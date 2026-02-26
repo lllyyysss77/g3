@@ -60,6 +60,8 @@ pub(crate) struct SniProxyServerConfig {
     pub(crate) client_tcp_portmap: ProtocolPortMap,
     pub(crate) extra_metrics_tags: Option<Arc<MetricTagMap>>,
     pub(crate) allowed_sites: Option<HostMatch<Arc<SniHostConfig>>>,
+    #[cfg(target_os = "linux")]
+    listen_transparent: bool,
 }
 
 impl SniProxyServerConfig {
@@ -93,6 +95,8 @@ impl SniProxyServerConfig {
             client_tcp_portmap: ProtocolPortMap::tcp_client(),
             extra_metrics_tags: None,
             allowed_sites: None,
+            #[cfg(target_os = "linux")]
+            listen_transparent: false,
         }
     }
 
@@ -255,6 +259,11 @@ impl SniProxyServerConfig {
                 self.allowed_sites = Some(allowed_sites);
                 Ok(())
             }
+            #[cfg(target_os = "linux")]
+            "listen_transparent" => {
+                self.listen_transparent = g3_yaml::value::as_bool(v)?;
+                Ok(())
+            }
             _ => Err(anyhow!("invalid key {k}")),
         }
     }
@@ -283,6 +292,11 @@ impl SniProxyServerConfig {
 
         if self.task_idle_check_interval > IDLE_CHECK_MAXIMUM_DURATION {
             self.task_idle_check_interval = IDLE_CHECK_MAXIMUM_DURATION;
+        }
+
+        #[cfg(target_os = "linux")]
+        if self.listen_transparent && let Some(listen) = &mut self.listen {
+            listen.set_transparent();
         }
 
         Ok(())
